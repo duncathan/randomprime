@@ -33,6 +33,7 @@ pub mod scly_props
     pub mod effect;
     pub mod hud_memo;
     pub mod memory_relay;
+    pub mod phazon_pool;
     pub mod pickup;
     pub mod platorm;
     pub mod point_of_interest;
@@ -57,6 +58,7 @@ pub mod scly_props
     pub use self::effect::*;
     pub use self::hud_memo::*;
     pub use self::memory_relay::*;
+    pub use self::phazon_pool::*;
     pub use self::pickup::*;
     pub use self::platorm::*;
     pub use self::point_of_interest::*;
@@ -81,6 +83,7 @@ pub use scly_props::door::*;
 pub use scly_props::effect::*;
 pub use scly_props::hud_memo::*;
 pub use scly_props::memory_relay::*;
+pub use scly_props::phazon_pool::*;
 pub use scly_props::pickup::*;
 pub use scly_props::platorm::*;
 pub use scly_props::point_of_interest::*;

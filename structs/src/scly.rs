@@ -223,6 +223,7 @@ build_scly_property!(
     Effect,            is_effect,             as_effect,             as_effect_mut,
     HudMemo,           is_hud_memo,           as_hud_memo,           as_hud_memo_mut,
     MemoryRelay,       is_memory_relay,       as_memory_relay,       as_memory_relay_mut,
+    PhazonPool,        is_phazon_pool,        as_phazon_pool,        as_phazon_pool_mut,
     Pickup,            is_pickup,             as_pickup,             as_pickup_mut,
     Platform,          is_platform,           as_platform,           as_platform_mut,
     PlayerActor,       is_player_actor,       as_player_actor,       as_player_actor_mut,
