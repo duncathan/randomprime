@@ -221,6 +221,7 @@ build_scly_property!(
     Dock,              is_dock,               as_dock,               as_dock_mut,
     Door,              is_door,               as_door,               as_door_mut,
     Effect,            is_effect,             as_effect,             as_effect_mut,
+    Generator,         is_generator,          as_generator,          as_generator_mut,
     HudMemo,           is_hud_memo,           as_hud_memo,           as_hud_memo_mut,
     MemoryRelay,       is_memory_relay,       as_memory_relay,       as_memory_relay_mut,
     PhazonPool,        is_phazon_pool,        as_phazon_pool,        as_phazon_pool_mut,
@@ -237,6 +238,7 @@ build_scly_property!(
     Timer,             is_timer,              as_timer,              as_timer_mut,
     Trigger,           is_trigger,            as_trigger,            as_trigger_mut,
     Water,             is_water,              as_water,              as_water_mut,
+    Waypoint,          is_waypoint,           as_waypoint,           as_waypoint_mut,
     WorldTransporter,  is_world_transporter,  as_world_transporter,  as_world_transporter_mut,
 );
 

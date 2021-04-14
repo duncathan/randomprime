@@ -31,6 +31,7 @@ pub mod scly_props
     pub mod dock;
     pub mod door;
     pub mod effect;
+    pub mod generator;
     pub mod hud_memo;
     pub mod memory_relay;
     pub mod phazon_pool;
@@ -47,6 +48,7 @@ pub mod scly_props
     pub mod timer;
     pub mod trigger;
     pub mod water;
+    pub mod waypoint;
     pub mod world_transporter;
 
     pub mod structs;
@@ -56,6 +58,7 @@ pub mod scly_props
     pub use self::dock::*;
     pub use self::door::*;
     pub use self::effect::*;
+    pub use self::generator::*;
     pub use self::hud_memo::*;
     pub use self::memory_relay::*;
     pub use self::phazon_pool::*;
@@ -72,6 +75,7 @@ pub mod scly_props
     pub use self::timer::*;
     pub use self::trigger::*;
     pub use self::water::*;
+    pub use self::waypoint::*;
     pub use self::world_transporter::*;
 }
 
@@ -81,6 +85,7 @@ pub use scly_props::damageable_trigger::*;
 pub use scly_props::dock::*;
 pub use scly_props::door::*;
 pub use scly_props::effect::*;
+pub use scly_props::generator::*;
 pub use scly_props::hud_memo::*;
 pub use scly_props::memory_relay::*;
 pub use scly_props::phazon_pool::*;
@@ -97,6 +102,7 @@ pub use scly_props::streamed_audio::*;
 pub use scly_props::timer::*;
 pub use scly_props::trigger::*;
 pub use scly_props::world_transporter::*;
+pub use scly_props::waypoint::*;
 
 pub use res_id::ResId;
 

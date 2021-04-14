@@ -1783,6 +1783,192 @@ fn patch_ore_processing_destructible_rock_pal(_ps: &mut PatcherState, area: &mut
     Ok(())
 }
 
+fn patch_add_phazon_pool<'r>(
+    ps: &mut PatcherState,
+    area: &mut mlvl_wrapper::MlvlArea<'r, '_, '_, '_>,
+    position: GenericArray<f32,U3>,
+    game_resources: &HashMap<(u32, FourCC), structs::Resource<'r>>,
+)
+    -> Result<(), String>
+{
+    let layer_id = area.layer_flags.layer_count as usize;
+    area.add_layer(b"phazon pool\0".as_cstr());
+
+    let phazon_pool_id = ps.fresh_instance_id_range.next().unwrap();
+    let phazon_pool = structs::SclyObject {
+        instance_id: phazon_pool_id,
+            property_data: structs::PhazonPool {
+                name: b"my_pool\0".as_cstr(),
+                position: [-529.0, 400.0, -24.0].into(),
+                rotation: [0.0, 0.0, -179.5].into(),
+                scale: [2.4, 2.4, 1.0].into(),
+                unknown1: 0,
+                cmdl1: resource_info!("DCE2C71B.CMDL").try_into().unwrap(),
+                cmdl2: resource_info!("9543BC9F.CMDL").try_into().unwrap(),
+                part1: ResId::invalid(), // TODO: trace dependencies correctly and include
+                part2: ResId::invalid(), // TODO: trace dependencies correctly and include
+                unknown2: 0,
+                contact_damage: structs::scly_structs::DamageInfo {
+                    weapon_type: 8,
+                    damage: 0.0,
+                    radius: 0.0,
+                    knockback_power: 0.0
+                },
+                force: [0.0, 0.0, 0.0].into(),
+                trigger_flags: 1, // unknown what this does
+                pool_starting_value: 10.0,
+                phazon_beam_drain_per_sec: 2.0,
+                time_until_regen: 10.0,
+                auto_drain_and_no_regen: 1,
+                time_until_auto_drain: 25.0,
+            }.into(),
+            connections: vec![].into(),
+    };
+
+    let waypoint_id = ps.fresh_instance_id_range.next().unwrap();
+    let generator_id = ps.fresh_instance_id_range.next().unwrap();
+    let generator = structs::SclyObject {
+        instance_id: generator_id,
+        property_data: structs::Generator {
+            name: b"phazon pool generator\0".as_cstr(),
+            spawn_count: 1,
+            no_reuse_followers: 0,
+            no_inherit_xf: 0,
+            offset: [0.0, 0.0, 0.0].into(),
+            active: 1,
+            min_scale: 1.0,
+            max_scale: 1.0,
+        }.into(),
+        connections: vec![
+            structs::Connection {
+                state: structs::ConnectionState::ZERO,
+                message: structs::ConnectionMsg::ACTIVATE,
+                target_object_id: phazon_pool_id,
+            },
+            structs::Connection {
+                state: structs::ConnectionState::ZERO,
+                message: structs::ConnectionMsg::FOLLOW,
+                target_object_id: waypoint_id,
+            },
+        ].into(),
+    };
+
+    let memo_id = ps.fresh_instance_id_range.next().unwrap();
+    let memo = structs::SclyObject {
+        instance_id: memo_id,
+        connections: vec![].into(),
+        property_data: structs::HudMemo {
+            name: b"phazon_suit\0".as_cstr(),
+
+            first_message_timer: 4.0,
+            unknown: 1,
+            memo_type: 0,
+            strg: custom_asset_ids::PHAZON_SUIT_STRG,
+            active: 1,
+        }.into(),
+    };
+
+    let waypoint = structs::SclyObject {
+        instance_id: waypoint_id,
+        connections: vec![].into(),
+        property_data: structs::Waypoint {
+            name: b"phazon_suit2\0".as_cstr(),
+            position: [-529.0, 400.0, -24.0].into(),
+            rotation: [0.0, 0.0, -179.5].into(),
+            active: 1,
+            speed: 1.0,
+            delay: 0.0,
+            pattern_translate: 0,
+            pattern_orient: 0,
+            pattern_fit: 0,
+            behavior: 0,
+            behavior_orient: 0,
+            behavior_modifiers: 0,
+            animation: 0,
+        }.into(),
+    };
+
+    let timer_id = ps.fresh_instance_id_range.next().unwrap();
+    let timer = structs::SclyObject {
+        instance_id: timer_id,
+        property_data: structs::Timer {
+            name: b"phazon pool spawn timer\0".as_cstr(),
+            start_time: 0.01,
+            max_random_add: 0.0,
+            reset_to_zero: 0,
+            start_immediately: 1,
+            active: 1,
+        }.into(),
+        connections: vec![
+            structs::Connection {
+                state: structs::ConnectionState::ZERO,
+                message: structs::ConnectionMsg::SET_TO_ZERO,
+                target_object_id: generator_id,
+            },
+            structs::Connection {
+                state: structs::ConnectionState::ZERO,
+                message: structs::ConnectionMsg::SET_TO_ZERO,
+                target_object_id: generator_id,
+            },
+            structs::Connection {
+                state: structs::ConnectionState::ZERO,
+                message: structs::ConnectionMsg::SET_TO_ZERO,
+                target_object_id: memo_id,
+            }
+        ].into(),
+    };
+
+    area.add_dependencies(
+        &game_resources,
+        layer_id,
+        iter::once(ResId::<res_id::CMDL>::new(0xDCE2C71B).into())
+    );
+
+    area.add_dependencies(
+        &game_resources,
+        layer_id,
+        iter::once(ResId::<res_id::CMDL>::new(0x9543BC9F).into())
+    );
+
+    area.add_dependencies(
+        &game_resources,
+        layer_id,
+        iter::once(custom_asset_ids::PHAZON_SUIT_STRG.into())
+    );
+
+    let scly = &mut area.mrea().scly_section_mut();
+    let layers = &mut scly.layers.as_mut_vec();
+
+    for obj in layers[0].objects.iter_mut() {
+        if obj.instance_id == 0x00062729 {
+            println!("Found the lil' guy");
+            obj.connections.as_mut_vec().push(
+                structs::Connection {
+                    state: structs::ConnectionState::DEAD,
+                    message: structs::ConnectionMsg::SET_TO_ZERO,
+                    target_object_id: generator_id,
+                }
+            );
+
+            obj.connections.as_mut_vec().push(
+                structs::Connection {
+                    state: structs::ConnectionState::DEAD,
+                    message: structs::ConnectionMsg::SET_TO_ZERO,
+                    target_object_id: memo_id,
+                }
+            );
+        }
+    }
+
+    layers[layer_id].objects.as_mut_vec().push(phazon_pool);
+    layers[layer_id].objects.as_mut_vec().push(generator);
+    layers[layer_id].objects.as_mut_vec().push(timer);
+    layers[layer_id].objects.as_mut_vec().push(memo);
+    layers[layer_id].objects.as_mut_vec().push(waypoint);
+
+    Ok(())
+}
+
 fn patch_main_quarry_door_lock_pal(_ps: &mut PatcherState, area: &mut mlvl_wrapper::MlvlArea)
     -> Result<(), String>
 {
@@ -3043,6 +3229,16 @@ fn build_and_run_patches(gc_disc: &mut structs::GcDisc, config: &PatchConfig, ve
             patch_landing_site_cutscene_triggers
         );
     }
+
+    patcher.add_scly_patch(
+        resource_info!("02_over_halfpipe.MREA").into(),
+        move |ps, area| patch_add_phazon_pool(
+            ps,
+            area,
+            [-385.9189, 383.3608, -27.6692].into(),
+            &game_resources
+        ),
+    );
 
     // If any of the elevators go straight to the ending, patch out the pre-credits cutscene.
     let skip_ending_cinematic = elevator_layout.values()

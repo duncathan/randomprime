@@ -274,6 +274,13 @@ pub fn collect_game_resources<'r>(
     looking_for.extend(DoorType::iter().flat_map(|x| x.dependencies()));
     looking_for.extend(BlastShieldType::iter().flat_map(|x| x.dependencies()));
 
+    {
+        let mut temp: Vec<(u32, FourCC)> = Vec::new();
+        temp.push((0xDCE2C71B, FourCC::from_bytes(b"CMDL")));
+        temp.push((0x9543BC9F, FourCC::from_bytes(b"CMDL")));
+        looking_for.extend(temp);
+    }
+
     // Dependencies read from paks and custom assets will go here //
     let mut found = HashMap::with_capacity(looking_for.len());
 

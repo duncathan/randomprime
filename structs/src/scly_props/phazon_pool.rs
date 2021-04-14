@@ -11,7 +11,7 @@ use crate::scly_props::structs::{DamageInfo};
 #[derive(Debug, Clone)]
 pub struct PhazonPool<'r>
 {
-    #[auto_struct(expect = 7)]
+    #[auto_struct(expect = 17)]
     prop_count: u32,
 
     pub name: CStr<'r>,
