@@ -1791,8 +1791,8 @@ fn patch_add_phazon_pool<'r>(
 )
     -> Result<(), String>
 {
-    let layer_id = area.layer_flags.layer_count as usize;
-    area.add_layer(b"phazon pool\0".as_cstr());
+    let layer_id = 0 as usize;
+    // area.add_layer(b"phazon pool\0".as_cstr());
 
     let phazon_pool_id = ps.fresh_instance_id_range.next().unwrap();
     let phazon_pool = structs::SclyObject {
@@ -1801,13 +1801,13 @@ fn patch_add_phazon_pool<'r>(
                 name: b"my_pool\0".as_cstr(),
                 position: [-529.0, 400.0, -24.0].into(),
                 rotation: [0.0, 0.0, -179.5].into(),
-                scale: [2.4, 2.4, 1.0].into(),
-                unknown1: 0,
+                scale: [0.5, 0.5, 0.1].into(),
+                unknown1: 1,
                 cmdl1: resource_info!("DCE2C71B.CMDL").try_into().unwrap(),
                 cmdl2: resource_info!("9543BC9F.CMDL").try_into().unwrap(),
-                part1: ResId::invalid(), // TODO: trace dependencies correctly and include
-                part2: ResId::invalid(), // TODO: trace dependencies correctly and include
-                unknown2: 0,
+                part1: resource_info!("88A390E8.PART").try_into().unwrap(),
+                part2: resource_info!("0231F8A4.PART").try_into().unwrap(),
+                unknown2: 1,
                 contact_damage: structs::scly_structs::DamageInfo {
                     weapon_type: 8,
                     damage: 0.0,
@@ -1825,6 +1825,7 @@ fn patch_add_phazon_pool<'r>(
             connections: vec![].into(),
     };
 
+    let memo_id = ps.fresh_instance_id_range.next().unwrap();
     let waypoint_id = ps.fresh_instance_id_range.next().unwrap();
     let generator_id = ps.fresh_instance_id_range.next().unwrap();
     let generator = structs::SclyObject {
@@ -1842,7 +1843,7 @@ fn patch_add_phazon_pool<'r>(
         connections: vec![
             structs::Connection {
                 state: structs::ConnectionState::ZERO,
-                message: structs::ConnectionMsg::ACTIVATE,
+                message: structs::ConnectionMsg::FOLLOW,
                 target_object_id: phazon_pool_id,
             },
             structs::Connection {
@@ -1853,7 +1854,6 @@ fn patch_add_phazon_pool<'r>(
         ].into(),
     };
 
-    let memo_id = ps.fresh_instance_id_range.next().unwrap();
     let memo = structs::SclyObject {
         instance_id: memo_id,
         connections: vec![].into(),
@@ -1878,9 +1878,9 @@ fn patch_add_phazon_pool<'r>(
             active: 1,
             speed: 1.0,
             delay: 0.0,
-            pattern_translate: 0,
-            pattern_orient: 0,
-            pattern_fit: 0,
+            pattern_translate: 1,
+            pattern_orient: 1,
+            pattern_fit: 1,
             behavior: 0,
             behavior_orient: 0,
             behavior_modifiers: 0,
@@ -1900,11 +1900,6 @@ fn patch_add_phazon_pool<'r>(
             active: 1,
         }.into(),
         connections: vec![
-            structs::Connection {
-                state: structs::ConnectionState::ZERO,
-                message: structs::ConnectionMsg::SET_TO_ZERO,
-                target_object_id: generator_id,
-            },
             structs::Connection {
                 state: structs::ConnectionState::ZERO,
                 message: structs::ConnectionMsg::SET_TO_ZERO,
@@ -1936,12 +1931,26 @@ fn patch_add_phazon_pool<'r>(
         iter::once(custom_asset_ids::PHAZON_SUIT_STRG.into())
     );
 
+    area.add_dependencies(&game_resources, layer_id, iter::once(custom_asset_ids::PHAZON_SUIT_STRG.into()));
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::PART>::new(0x88A390E8).into())); // PART
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::PART>::new(0xAC615842).into())); // PART
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::PART>::new(0xF4B56681).into())); // PART
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::TXTR>::new(0x25f62451).into())); // TXTR GLOWb
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::PART>::new(0x0231F8A4).into())); // PART
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::PART>::new(0xC7AA4C84).into())); // PART
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::PART>::new(0xCC6B4C21).into())); // PART
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::TXTR>::new(0x8b1f5147).into())); // TXTR LiteBolt1b
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::CMDL>::new(0x31692DD8).into())); // CMDL
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::TXTR>::new(0x70981579).into())); // TXTR
+    area.add_dependencies(&game_resources, layer_id, iter::once(ResId::<res_id::TXTR>::new(0x91791892).into())); // TXTR
+
     let scly = &mut area.mrea().scly_section_mut();
     let layers = &mut scly.layers.as_mut_vec();
 
     for obj in layers[0].objects.iter_mut() {
         if obj.instance_id == 0x00062729 {
             println!("Found the lil' guy");
+            /*
             obj.connections.as_mut_vec().push(
                 structs::Connection {
                     state: structs::ConnectionState::DEAD,
@@ -1949,12 +1958,22 @@ fn patch_add_phazon_pool<'r>(
                     target_object_id: generator_id,
                 }
             );
-
+            */
+            /*
             obj.connections.as_mut_vec().push(
                 structs::Connection {
                     state: structs::ConnectionState::DEAD,
                     message: structs::ConnectionMsg::SET_TO_ZERO,
                     target_object_id: memo_id,
+                }
+            );
+            */
+
+            obj.connections.as_mut_vec().push(
+                structs::Connection {
+                    state: structs::ConnectionState::DEAD,
+                    message: structs::ConnectionMsg::ACTIVATE,
+                    target_object_id: phazon_pool_id,
                 }
             );
         }

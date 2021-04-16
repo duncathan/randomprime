@@ -278,6 +278,17 @@ pub fn collect_game_resources<'r>(
         let mut temp: Vec<(u32, FourCC)> = Vec::new();
         temp.push((0xDCE2C71B, FourCC::from_bytes(b"CMDL")));
         temp.push((0x9543BC9F, FourCC::from_bytes(b"CMDL")));
+        temp.push((0x88A390E8, FourCC::from_bytes(b"PART")));
+        temp.push((0xAC615842, FourCC::from_bytes(b"PART")));
+        temp.push((0xF4B56681, FourCC::from_bytes(b"PART")));
+        temp.push((0x25f62451, FourCC::from_bytes(b"TXTR")));
+        temp.push((0x0231F8A4, FourCC::from_bytes(b"PART")));
+        temp.push((0xC7AA4C84, FourCC::from_bytes(b"PART")));
+        temp.push((0xCC6B4C21, FourCC::from_bytes(b"PART")));
+        temp.push((0x8b1f5147, FourCC::from_bytes(b"TXTR")));
+        temp.push((0x31692DD8, FourCC::from_bytes(b"CMDL")));
+        temp.push((0x70981579, FourCC::from_bytes(b"TXTR")));
+        temp.push((0x91791892, FourCC::from_bytes(b"TXTR")));
         looking_for.extend(temp);
     }
 
