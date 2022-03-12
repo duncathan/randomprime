@@ -2397,6 +2397,449 @@ fn make_elevators_patch<'a>(
     (skip_frigate, skip_ending_cinematic)
 }
 
+fn is_fake_door<'r>(obj: &structs::SclyObject<'r>) -> bool {
+    if !obj.property_data.is_actor() {
+        return false;
+    }
+
+    let actor = obj.property_data.as_actor().unwrap();
+    actor.name.to_str().unwrap().to_lowercase().contains("fake")
+}
+
+fn patch_backwards_uncrashed_frigate<'r>(
+    ps: &mut PatcherState,
+    area: &mut mlvl_wrapper::MlvlArea<'r, '_, '_, '_>,
+    game_resources: &HashMap<(u32, FourCC), structs::Resource<'r>>,
+) -> Result<(), String>
+{
+    let deps: Vec<(u32, FourCC)> = DoorType::Blue.dependencies();
+    let deps_iter = deps.iter()
+        .map(|&(file_id, fourcc)| structs::Dependency {
+                asset_id: file_id,
+                asset_type: fourcc,
+        }
+    );
+    area.add_dependencies(&game_resources, 0, deps_iter);
+
+    let _room_id = area.mlvl_area.mrea.to_u32();
+    let layer_count = area.layer_flags.layer_count as usize;
+    let layers = area.mrea().scly_section_mut().layers.as_mut_vec();
+
+    let mut door_position: [f32;3] = [0.0, 0.0, 0.0];
+    let mut door_rotation: [f32;3] = [0.0, 0.0, 0.0];
+    
+    let mut door_id: u32 = 0;
+    let mut dock_id: u32 = 0;
+
+    let mut is_large_door = false;
+
+    for i in 0..layer_count {
+        layers[i].objects.as_mut_vec().retain(|obj| !is_fake_door(&obj));
+        for obj in layers[i].objects.as_mut_vec().iter_mut() {
+            if !obj.property_data.is_door() {
+                continue; // not a door
+            }
+            
+            if obj.connections.as_mut_vec().len() > 4 {
+                continue; // not a disabled door
+            }
+
+            let door = obj.property_data.as_door_mut().unwrap();
+
+            door_id = obj.instance_id;
+            door_position = door.position.into();
+            door_rotation = door.rotation.into();
+            is_large_door = door.open_close_animation_len > 1.1;
+
+            for conn in obj.connections.as_mut_vec().iter_mut() {
+                if conn.message == structs::ConnectionMsg::DECREMENT {
+                    dock_id = conn.target_object_id;
+                    break;
+                }
+            }
+
+            obj.connections.as_mut_vec().retain(|conn| conn.message != structs::ConnectionMsg::SET_TO_ZERO);
+            
+            break;
+        }
+    }
+
+    if door_id == 0 {
+        return Ok(());
+    }
+
+    let shield_id = ps.fresh_instance_id_range.next().unwrap();
+    let trigger_id = ps.fresh_instance_id_range.next().unwrap();
+    let timer_id = ps.fresh_instance_id_range.next().unwrap();
+    let damageable_trigger_id = ps.fresh_instance_id_range.next().unwrap();
+    let relay_id = ps.fresh_instance_id_range.next().unwrap();
+
+    let door_obj = layers[0].objects.iter_mut().find(|obj| obj.instance_id == door_id).unwrap();
+    door_obj.connections.as_mut_vec().extend_from_slice(
+        &[
+            structs::Connection {
+                state: structs::ConnectionState::OPEN,
+                message: structs::ConnectionMsg::INCREMENT,
+                target_object_id: dock_id,
+            },
+            // closed - decrement dock
+            structs::Connection {
+                state: structs::ConnectionState::OPEN,
+                message: structs::ConnectionMsg::ACTIVATE,
+                target_object_id: trigger_id,
+            },
+            structs::Connection {
+                state: structs::ConnectionState::OPEN,
+                message: structs::ConnectionMsg::START,
+                target_object_id: timer_id,
+            },
+            structs::Connection {
+                state: structs::ConnectionState::CLOSED,
+                message: structs::ConnectionMsg::DEACTIVATE,
+                target_object_id: trigger_id,
+            },
+            structs::Connection {
+                state: structs::ConnectionState::OPEN,
+                message: structs::ConnectionMsg::DEACTIVATE,
+                target_object_id: damageable_trigger_id,
+            },
+            structs::Connection {
+                state: structs::ConnectionState::OPEN,
+                message: structs::ConnectionMsg::DEACTIVATE,
+                target_object_id: shield_id,
+            },
+            structs::Connection { // Relay
+                state: structs::ConnectionState::CLOSED,
+                message: structs::ConnectionMsg::SET_TO_ZERO,
+                target_object_id: relay_id,
+            },
+            structs::Connection {
+                state: structs::ConnectionState::MAX_REACHED,
+                message: structs::ConnectionMsg::DEACTIVATE,
+                target_object_id: shield_id,
+            },
+            structs::Connection {
+                state: structs::ConnectionState::MAX_REACHED,
+                message: structs::ConnectionMsg::DEACTIVATE,
+                target_object_id: damageable_trigger_id,
+            },
+        ]
+    );
+
+    let (x_offset, y_offset, render_side, x_scale, y_scale) = {
+        if is_large_door{ 
+            if door_rotation[2] >= 45.0 && door_rotation[2] < 135.0 {
+                // Leads North (Y+)
+                (0.38, 0.0, 1, 4.5, 0.25)
+            } else if (door_rotation[2] >= 135.0 && door_rotation[2] < 225.0) || (door_rotation[2] < -135.0 && door_rotation[2] > -225.0) {
+                // Leads East (X+)
+                (0.0, -0.38, 4, 0.25, 4.5)
+            } else if door_rotation[2] >= -135.0 && door_rotation[2] < -45.0 {
+                // Leads South (Y-)
+                (0.0, 0.38, 2, 4.5, 0.25)
+            } else if door_rotation[2] >= -45.0 && door_rotation[2] < 45.0 {
+                // Leads West (X-)
+                (-0.38, 0.0, 3, 0.25, 4.5)
+            } else {
+                (0.0, 0.0, 0, 0.0, 0.0)
+            }
+        } else {
+            if door_rotation[2] >= 45.0 && door_rotation[2] < 135.0 {
+                // Leads North (Y+)
+                (0.39, 0.0, 1, 4.5, 0.25)
+            } else if (door_rotation[2] >= 135.0 && door_rotation[2] < 225.0) || (door_rotation[2] < -135.0 && door_rotation[2] > -225.0) {
+                // Leads East (X+)
+                (0.0, -0.39, 4, 0.25, 4.5)
+            } else if door_rotation[2] >= -135.0 && door_rotation[2] < -45.0 {
+                // Leads South (Y-)
+                (0.0, 0.39, 2, 4.5, 0.25)
+            } else if door_rotation[2] >= -45.0 && door_rotation[2] < 45.0 {
+                // Leads West (X-)
+                (-0.39, 0.0, 3, 0.25, 4.5)
+            } else {
+                (0.0, 0.0, 0, 0.0, 0.0)
+            }
+        }
+    };
+
+    layers[0].objects.as_mut_vec().extend_from_slice(
+        &[
+            structs::SclyObject {
+                instance_id: shield_id,
+                connections: vec![].into(),
+                property_data: structs::SclyProperty::Actor(
+                    Box::new(
+                        structs::Actor {
+                            name: b"Actor_DoorShield\0".as_cstr(),
+                            position: [door_position[0] + x_offset, door_position[1] + y_offset, door_position[2] + 1.8].into(),
+                            rotation: door_rotation.into(),
+                            scale: [1.0, 1.0, 1.0].into(),
+                            hitbox: [0.0, 0.0, 0.0].into(),
+                            scan_offset: [0.0, 0.0, 0.0].into(),
+                            unknown1: 1.0,
+                            unknown2: 0.0,
+                            health_info: structs::scly_structs::HealthInfo {
+                                health: 5.0,
+                                knockback_resistance: 1.0
+                            },
+                            damage_vulnerability: structs::scly_structs::DamageVulnerability {
+                                power: 1,           // Normal
+                                ice: 1,             // Normal
+                                wave: 1,            // Normal
+                                plasma: 1,          // Normal
+                                bomb: 1,            // Normal
+                                power_bomb: 1,      // Normal
+                                missile: 1,         // Normal
+                                boost_ball: 1,      // Normal
+                                phazon: 1,          // Normal
+                                enemy_weapon0: 2,   // Reflect
+                                enemy_weapon1: 2,   // Reflect
+                                enemy_weapon2: 2,   // Reflect
+                                enemy_weapon3: 2,   // Reflect
+                                unknown_weapon0: 2, // Reflect
+                                unknown_weapon1: 2, // Reflect
+                                unknown_weapon2: 0, // Double Damage
+                                charged_beams: structs::scly_structs::ChargedBeams {
+                                    power: 1,       // Normal
+                                    ice: 1,         // Normal
+                                    wave: 1,        // Normal
+                                    plasma: 1,      // Normal
+                                    phazon: 0       // Double Damage
+                                },
+                                beam_combos: structs::scly_structs::BeamCombos {
+                                    power: 1,       // Normal
+                                    ice: 1,         // Normal
+                                    wave: 1,        // Normal
+                                    plasma: 1,      // Normal
+                                    phazon: 0       // Double Damage
+                                }
+                            },
+                            cmdl: resource_info!("blueShield_v1.CMDL").try_into().unwrap(),
+                            ancs: structs::scly_structs::AncsProp {
+                                file_id: ResId::invalid(), // None
+                                node_index: 0,
+                                default_animation: 0xFFFFFFFF, // -1
+                            },
+                            actor_params: structs::scly_structs::ActorParameters {
+                                light_params: structs::scly_structs::LightParameters {
+                                    unknown0: 1,
+                                    unknown1: 1.0,
+                                    shadow_tessellation: 0,
+                                    unknown2: 1.0,
+                                    unknown3: 20.0,
+                                    color: [1.0, 1.0, 1.0, 1.0].into(),
+                                    unknown4: 1,
+                                    world_lighting: 1,
+                                    light_recalculation: 1,
+                                    unknown5: [0.0, 0.0, 0.0].into(),
+                                    unknown6: 4,
+                                    unknown7: 4,
+                                    unknown8: 0,
+                                    light_layer_id: 0
+                                },
+                                scan_params: structs::scly_structs::ScannableParameters {
+                                    scan: ResId::invalid(), // None
+                                },
+                                xray_cmdl: ResId::invalid(), // None
+                                xray_cskr: ResId::invalid(), // None
+                                thermal_cmdl: ResId::invalid(), // None
+                                thermal_cskr: ResId::invalid(), // None
+            
+                                unknown0: 1,
+                                unknown1: 1.0,
+                                unknown2: 1.0,
+            
+                                visor_params: structs::scly_structs::VisorParameters {
+                                    unknown0: 0,
+                                    target_passthrough: 0,
+                                    visor_mask: 15 // Combat|Scan|Thermal|XRay
+                                },
+                                enable_thermal_heat: 1,
+                                unknown3: 0,
+                                unknown4: 1,
+                                unknown5: 1.0
+                            },
+                            looping: 1,
+                            snow: 1,
+                            solid: 0,
+                            camera_passthrough: 0,
+                            active: 1,
+                            unknown8: 0,
+                            unknown9: 1.0,
+                            unknown10: 1,
+                            unknown11: 0,
+                            unknown12: 0,
+                            unknown13: 0
+                        }.into(),
+                    )
+                ),
+            },
+            structs::SclyObject {
+                instance_id: trigger_id,
+                connections: vec![
+                    structs::Connection {
+                        state: structs::ConnectionState::INSIDE,
+                        message: structs::ConnectionMsg::OPEN,
+                        target_object_id: door_id,
+                    },
+                    structs::Connection {
+                        state: structs::ConnectionState::INSIDE,
+                        message: structs::ConnectionMsg::RESET_AND_START,
+                        target_object_id: timer_id,
+                    },
+                ].into(),
+                property_data: structs::SclyProperty::Trigger(
+                    Box::new(
+                        structs::Trigger {
+                            name: b"Trigger_DoorOpen\0".as_cstr(),
+                            active: 0,
+                            position: door_position.into(),
+                            scale: [25.0, 25.0, 5.0].into(),
+                            damage_info: structs::scly_structs::DamageInfo {
+                                weapon_type: 0,
+                                damage: 0.0,
+                                radius: 0.0,
+                                knockback_power: 0.0
+                            },
+                            force: [0.0, 0.0, 0.0].into(),
+                            flags: 1, // detect player
+                            deactivate_on_enter: 0,
+                            deactivate_on_exit: 0,
+                        }
+                    )
+                )
+            },
+            structs::SclyObject {
+                instance_id: timer_id,
+                connections: vec![
+                    structs::Connection {
+                        state: structs::ConnectionState::ZERO,
+                        message: structs::ConnectionMsg::CLOSE,
+                        target_object_id: door_id,
+                    },
+                    structs::Connection {
+                        state: structs::ConnectionState::ZERO,
+                        message: structs::ConnectionMsg::DEACTIVATE,
+                        target_object_id: trigger_id,
+                    },
+                ].into(),
+                property_data: structs::SclyProperty::Timer(
+                    Box::new(
+                        structs::Timer {
+                            name: b"Timer_DoorClose\0".as_cstr(),
+                            start_time: 0.25,
+                            max_random_add: 0.0,
+                            reset_to_zero: 1,
+                            start_immediately: 0,
+                            active: 1,
+                        }
+                    )
+                )
+            },
+            structs::SclyObject {
+                instance_id: relay_id,
+                connections: vec![
+                    structs::Connection {
+                        state: structs::ConnectionState::ZERO,
+                        message: structs::ConnectionMsg::ACTIVATE,
+                        target_object_id: shield_id,
+                    },
+                    structs::Connection {
+                        state: structs::ConnectionState::ZERO,
+                        message: structs::ConnectionMsg::ACTIVATE,
+                        target_object_id: damageable_trigger_id,
+                    },
+                ].into(),
+                property_data: structs::SclyProperty::Relay(Box::new(
+                    structs::Relay {
+                        name: b"Relay_Unlock\0".as_cstr(),
+                        active: 1,
+                    }
+                ))
+            },
+            structs::SclyObject {
+                instance_id: damageable_trigger_id,
+                connections: vec![
+                    structs::Connection {
+                        state: structs::ConnectionState::DEAD,
+                        message: structs::ConnectionMsg::DEACTIVATE,
+                        target_object_id: shield_id,
+                    },
+                    structs::Connection {
+                        state: structs::ConnectionState::MAX_REACHED,
+                        message: structs::ConnectionMsg::ACTIVATE,
+                        target_object_id: shield_id,
+                    },
+                    structs::Connection {
+                        state: structs::ConnectionState::DEAD,
+                        message: structs::ConnectionMsg::ACTIVATE,
+                        target_object_id: trigger_id,
+                    },
+                    structs::Connection {
+                        state: structs::ConnectionState::DEAD,
+                        message: structs::ConnectionMsg::SET_TO_ZERO,
+                        target_object_id: door_id,
+                    },
+                ].into(),
+                property_data: structs::DamageableTrigger {
+                    name: b"Trigger_DoorUnlock\0".as_cstr(),
+                    position: [door_position[0] + x_offset, door_position[1] + y_offset, door_position[2] + 1.8].into(),
+                    scale: [x_scale, y_scale, 4.0].into(),
+                    health_info: structs::scly_structs::HealthInfo {
+                        health: 1.0,
+                        knockback_resistance: 1.0
+                    },
+                    damage_vulnerability: structs::scly_structs::DamageVulnerability {
+                        power: 1,           // Normal
+                        ice: 1,             // Normal
+                        wave: 1,            // Normal
+                        plasma: 1,          // Normal
+                        bomb: 1,            // Normal
+                        power_bomb: 1,      // Normal
+                        missile: 2,         // Reflect
+                        boost_ball: 2,      // Reflect
+                        phazon: 1,          // Normal
+                        enemy_weapon0: 3,   // Immune
+                        enemy_weapon1: 2,   // Reflect
+                        enemy_weapon2: 2,   // Reflect
+                        enemy_weapon3: 2,   // Reflect
+                        unknown_weapon0: 2, // Reflect
+                        unknown_weapon1: 2, // Reflect
+                        unknown_weapon2: 1, // Normal
+                        charged_beams: structs::scly_structs::ChargedBeams {
+                            power: 1,       // Normal
+                            ice: 1,         // Normal
+                            wave: 1,        // Normal
+                            plasma: 1,      // Normal
+                            phazon: 1       // Normal
+                        },
+                        beam_combos: structs::scly_structs::BeamCombos {
+                            power: 2,       // Reflect
+                            ice: 2,         // Reflect
+                            wave: 2,        // Reflect
+                            plasma: 2,      // Reflect
+                            phazon: 1       // Normal
+                        }
+                    },
+                    unknown0: render_side,
+                    pattern_txtr0: resource_info!("testb.TXTR").try_into().unwrap(),
+                    pattern_txtr1: resource_info!("testb.TXTR").try_into().unwrap(),
+                    color_txtr: resource_info!("blue.TXTR").try_into().unwrap(),
+                    lock_on: 1,
+                    active: 1,
+                    visor_params: structs::scly_structs::VisorParameters {
+                        unknown0: 0,
+                        target_passthrough: 0,
+                        visor_mask: 15 // Combat|Scan|Thermal|XRay
+                    }
+                }.into(),
+            },
+        ]
+    );
+
+    Ok(())
+}
+
 fn patch_post_pq_frigate(
     _ps: &mut PatcherState,
     area: &mut mlvl_wrapper::MlvlArea,
@@ -9707,7 +10150,19 @@ fn build_and_run_patches(gc_disc: &mut structs::GcDisc, config: &PatchConfig, ve
             );
         }
 
-        if !config.force_vanilla_layout {
+        if !config.force_vanilla_layout && config.qol_game_breaking {
+            let (pak_name, rooms) = pickup_meta::ROOM_INFO[0];
+            for room_info in rooms.iter() {
+                patcher.add_scly_patch(
+                    (pak_name.as_bytes(), room_info.room_id.to_u32()),
+                    move |ps, area| patch_backwards_uncrashed_frigate(
+                        ps,
+                        area,
+                        &game_resources,
+                    ),
+                );
+            }
+
             // Patch frigate so that it can be explored any direction without crashing or soft-locking
             patcher.add_scly_patch(
                 resource_info!("01_intro_hanger_connect.MREA").into(),
